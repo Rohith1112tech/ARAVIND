@@ -2,7 +2,7 @@
  * ARAVIND GYM - Service Worker (PWA Offline Support)
  */
 
-const CACHE_NAME = 'aravind-gym-v1.1';
+const CACHE_NAME = 'aravind-gym-v1.2';
 const STATIC_ASSETS = [
   './',
   './index.html',
