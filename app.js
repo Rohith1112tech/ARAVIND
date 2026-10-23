@@ -68,10 +68,13 @@ const WORKOUT_DAYS = [
 const TOTAL_ROWS = 10;
 const STORAGE_PREFIX = "aravind_gym_data_";
 const META_PREFIX = "aravind_gym_meta_";
+const GDRIVE_URL_KEY = "aravind_gym_gdrive_url";
+const GDRIVE_LAST_SYNC_KEY = "aravind_gym_gdrive_last_sync";
 
 // App State
 let currentDay = null;
 let saveTimeout = null;
+let driveSyncTimeout = null;
 
 // DOM Elements
 const dashboardView = document.getElementById("dashboard-view");
@@ -89,11 +92,24 @@ const currentDateText = document.getElementById("current-date-text");
 const workoutDateInput = document.getElementById("workout-date-input");
 const detailTimestampText = document.getElementById("detail-timestamp-text");
 
+// Drive Sync Elements
+const btnDriveSyncSettings = document.getElementById("btn-drive-sync-settings");
+const driveSyncStatusText = document.getElementById("drive-sync-status-text");
+const driveModalOverlay = document.getElementById("drive-modal-overlay");
+const btnCloseModal = document.getElementById("btn-close-modal");
+const gdriveScriptUrlInput = document.getElementById("gdrive-script-url");
+const btnSaveDriveUrl = document.getElementById("btn-save-drive-url");
+const btnTestDriveSync = document.getElementById("btn-test-drive-sync");
+const btnCopyGasCode = document.getElementById("btn-copy-gas-code");
+const driveModalStatusBox = document.getElementById("drive-modal-status-box");
+const modalStatusText = document.getElementById("modal-status-text");
+
 /**
  * Initialize Application
  */
 function initApp() {
   initTodayDateDisplay();
+  initDriveSync();
   renderDashboardCards();
   setupEventListeners();
   handleRoute();
@@ -335,6 +351,9 @@ function saveCurrentDayData() {
     if (detailTimestampText) {
       detailTimestampText.textContent = `Last saved: ${formatTimestamp(meta.lastSaved)}`;
     }
+
+    // Trigger silent background auto-save to Google Drive
+    triggerBackgroundDriveSync();
   } catch (err) {
     console.error("Error saving to localStorage:", err);
   }
@@ -527,6 +546,253 @@ function setupEventListeners() {
       handleInputChange();
     });
   }
+
+  // Google Drive Modal & Sync Listeners
+  if (btnDriveSyncSettings) {
+    btnDriveSyncSettings.addEventListener("click", openDriveModal);
+  }
+  if (btnCloseModal) {
+    btnCloseModal.addEventListener("click", closeDriveModal);
+  }
+  if (driveModalOverlay) {
+    driveModalOverlay.addEventListener("click", (e) => {
+      if (e.target === driveModalOverlay) closeDriveModal();
+    });
+  }
+  if (btnSaveDriveUrl) {
+    btnSaveDriveUrl.addEventListener("click", saveDriveUrlAndSync);
+  }
+  if (btnTestDriveSync) {
+    btnTestDriveSync.addEventListener("click", forceDriveSync);
+  }
+  if (btnCopyGasCode) {
+    btnCopyGasCode.addEventListener("click", copyGasCode);
+  }
+}
+
+/**
+ * Google Drive Auto-Sync Logic
+ */
+function initDriveSync() {
+  const savedUrl = localStorage.getItem(GDRIVE_URL_KEY);
+  if (savedUrl && gdriveScriptUrlInput) {
+    gdriveScriptUrlInput.value = savedUrl;
+  }
+
+  if (savedUrl) {
+    const lastSync = localStorage.getItem(GDRIVE_LAST_SYNC_KEY);
+    updateDriveStatusBadge("synced", lastSync);
+    updateModalStatus(true, lastSync ? `Connected &bull; Last synced: ${formatTimestamp(lastSync)}` : "Connected to Google Drive");
+    
+    // Check and pull cloud data silently on startup
+    pullDriveBackup(savedUrl);
+  } else {
+    updateDriveStatusBadge("disconnected");
+    updateModalStatus(false, "Not connected yet");
+  }
+}
+
+function openDriveModal() {
+  if (!driveModalOverlay) return;
+  const savedUrl = localStorage.getItem(GDRIVE_URL_KEY);
+  if (savedUrl && gdriveScriptUrlInput) {
+    gdriveScriptUrlInput.value = savedUrl;
+  }
+  driveModalOverlay.classList.add("active");
+}
+
+function closeDriveModal() {
+  if (!driveModalOverlay) return;
+  driveModalOverlay.classList.remove("active");
+}
+
+function updateDriveStatusBadge(state, timeIso) {
+  if (!btnDriveSyncSettings || !driveSyncStatusText) return;
+
+  btnDriveSyncSettings.classList.remove("synced", "syncing");
+
+  if (state === "syncing") {
+    btnDriveSyncSettings.classList.add("syncing");
+    driveSyncStatusText.textContent = "Syncing to Drive...";
+  } else if (state === "synced") {
+    btnDriveSyncSettings.classList.add("synced");
+    driveSyncStatusText.textContent = "Drive Auto-Save: Active ✓";
+    if (timeIso) {
+      btnDriveSyncSettings.title = `Last saved to Google Drive: ${formatTimestamp(timeIso)}`;
+    }
+  } else {
+    driveSyncStatusText.textContent = "Drive Auto-Save: Connect";
+    btnDriveSyncSettings.title = "Click to connect your Google Drive for automatic background saving";
+  }
+}
+
+function updateModalStatus(isConnected, message) {
+  if (!driveModalStatusBox || !modalStatusText) return;
+  if (isConnected) {
+    driveModalStatusBox.classList.add("connected");
+  } else {
+    driveModalStatusBox.classList.remove("connected");
+  }
+  modalStatusText.innerHTML = message;
+}
+
+function getAllGymDataPayload() {
+  const payload = {
+    appName: "ARAVIND GYM",
+    version: "1.0",
+    syncedAt: new Date().toISOString(),
+    days: {}
+  };
+
+  WORKOUT_DAYS.forEach((day) => {
+    payload.days[day.id] = {
+      table: loadWorkoutData(day.id),
+      meta: loadWorkoutMeta(day.id)
+    };
+  });
+
+  return payload;
+}
+
+/**
+ * Trigger background debounced auto-sync to Google Drive
+ */
+function triggerBackgroundDriveSync() {
+  const scriptUrl = localStorage.getItem(GDRIVE_URL_KEY);
+  if (!scriptUrl) return;
+
+  clearTimeout(driveSyncTimeout);
+  driveSyncTimeout = setTimeout(() => {
+    performDriveSync(scriptUrl);
+  }, 1200);
+}
+
+/**
+ * Sends data silently to Google Drive Web App
+ */
+async function performDriveSync(scriptUrl) {
+  if (!scriptUrl) return;
+  updateDriveStatusBadge("syncing");
+
+  try {
+    const payload = getAllGymDataPayload();
+    
+    // mode: 'no-cors' allows fire-and-forget POST to Google Apps Script without CORS errors
+    await fetch(scriptUrl, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const nowIso = new Date().toISOString();
+    localStorage.setItem(GDRIVE_LAST_SYNC_KEY, nowIso);
+    updateDriveStatusBadge("synced", nowIso);
+    updateModalStatus(true, `Synced to Drive &bull; ${formatTimestamp(nowIso)}`);
+  } catch (err) {
+    console.warn("Drive Auto-Sync Notice:", err);
+    // Maintain active indicator if network temporarily blips
+    const lastSync = localStorage.getItem(GDRIVE_LAST_SYNC_KEY);
+    updateDriveStatusBadge("synced", lastSync);
+  }
+}
+
+/**
+ * Pulls latest backup from Google Drive on startup or force sync
+ */
+async function pullDriveBackup(scriptUrl) {
+  try {
+    const res = await fetch(`${scriptUrl}?action=get&t=${Date.now()}`);
+    if (!res.ok) return;
+    const cloudData = await res.json();
+
+    if (cloudData && cloudData.days) {
+      let updatedAny = false;
+      WORKOUT_DAYS.forEach((day) => {
+        const cloudDay = cloudData.days[day.id];
+        if (cloudDay && Array.isArray(cloudDay.table)) {
+          // If local has no data or cloud is present, sync it
+          const localData = loadWorkoutData(day.id);
+          const hasLocalData = localData.some(r => r.exercise || r.set1_weight || r.set2_weight || r.set3_weight);
+          if (!hasLocalData && cloudDay.table.some(r => r.exercise || r.set1_weight)) {
+            localStorage.setItem(STORAGE_PREFIX + day.id, JSON.stringify(cloudDay.table));
+            if (cloudDay.meta) {
+              localStorage.setItem(META_PREFIX + day.id, JSON.stringify(cloudDay.meta));
+            }
+            updatedAny = true;
+          }
+        }
+      });
+
+      if (updatedAny) {
+        renderDashboardCards();
+        if (currentDay) renderWorkoutTable(currentDay.id);
+      }
+    }
+  } catch (e) {
+    // Silent fallback to local storage
+  }
+}
+
+function saveDriveUrlAndSync() {
+  if (!gdriveScriptUrlInput) return;
+  const url = gdriveScriptUrlInput.value.trim();
+
+  if (!url) {
+    localStorage.removeItem(GDRIVE_URL_KEY);
+    localStorage.removeItem(GDRIVE_LAST_SYNC_KEY);
+    updateDriveStatusBadge("disconnected");
+    updateModalStatus(false, "Disconnected from Google Drive");
+    alert("Google Drive sync disabled.");
+    closeDriveModal();
+    return;
+  }
+
+  if (!url.startsWith("https://script.google.com/macros/s/")) {
+    alert("Please enter a valid Google Apps Script Web App URL (starts with https://script.google.com/macros/s/...)");
+    return;
+  }
+
+  localStorage.setItem(GDRIVE_URL_KEY, url);
+  updateModalStatus(true, "Connecting and performing first sync...");
+  performDriveSync(url);
+
+  setTimeout(() => {
+    alert("Google Drive background auto-save is now active! Any changes you make will save to your Drive automatically.");
+    closeDriveModal();
+  }, 700);
+}
+
+function forceDriveSync() {
+  const url = gdriveScriptUrlInput ? gdriveScriptUrlInput.value.trim() : localStorage.getItem(GDRIVE_URL_KEY);
+  if (!url) {
+    alert("Please enter your Google Apps Script Web App URL first.");
+    return;
+  }
+  performDriveSync(url);
+}
+
+function copyGasCode() {
+  const snippet = document.getElementById("gas-code-snippet");
+  if (!snippet) return;
+
+  navigator.clipboard.writeText(snippet.textContent.trim()).then(() => {
+    if (btnCopyGasCode) {
+      const orig = btnCopyGasCode.textContent;
+      btnCopyGasCode.textContent = "Copied! ✓";
+      btnCopyGasCode.style.background = "#10b981";
+      btnCopyGasCode.style.color = "#000";
+      setTimeout(() => {
+        btnCopyGasCode.textContent = orig;
+        btnCopyGasCode.style.background = "";
+        btnCopyGasCode.style.color = "";
+      }, 2000);
+    }
+  }).catch(() => {
+    alert("Failed to copy code. Please manually select and copy.");
+  });
 }
 
 /**

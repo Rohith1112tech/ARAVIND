@@ -29,14 +29,23 @@
           <h1 class="brand-title" id="main-header-title">ARAVIND GYM</h1>
         </div>
         <div class="header-right">
-          <div class="today-date-badge" id="today-date-display">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-            <span id="current-date-text">Loading date...</span>
+          <div class="header-status-row">
+            <button class="drive-sync-badge" id="btn-drive-sync-settings" type="button" title="Google Drive Auto-Sync Settings">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+              </svg>
+              <span id="drive-sync-status-text">Drive Auto-Save: Connect</span>
+            </button>
+
+            <div class="today-date-badge" id="today-date-display">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              <span id="current-date-text">Loading date...</span>
+            </div>
           </div>
           <div class="header-tagline">Strength &bull; Discipline &bull; Progress</div>
         </div>
@@ -183,6 +192,85 @@
     <footer class="app-footer">
       <p>Copyright &copy; 2026 Turbonex . All rights reserved</p>
     </footer>
+  </div>
+
+  <!-- Google Drive Background Auto-Save Settings Modal -->
+  <div class="modal-overlay" id="drive-modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <div class="modal-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
+            </svg>
+          </div>
+          <div>
+            <h3>Google Drive Cloud Auto-Save</h3>
+            <span class="modal-sub">Silently syncs every edit directly to your Google Drive</span>
+          </div>
+        </div>
+        <button class="modal-close-btn" id="btn-close-modal" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="modal-field">
+          <label for="gdrive-script-url">Your Google Apps Script Web App URL:</label>
+          <input 
+            type="url" 
+            id="gdrive-script-url" 
+            placeholder="https://script.google.com/macros/s/.../exec"
+            autocomplete="off"
+            spellcheck="false"
+          >
+          <span class="field-hint">Paste once. Every change you make in any workout routine will automatically save to your Google Drive without clicking anything.</span>
+        </div>
+
+        <div class="drive-status-preview" id="drive-modal-status-box">
+          <span class="status-indicator-dot" id="modal-status-dot"></span>
+          <span id="modal-status-text">Status: Not connected</span>
+        </div>
+
+        <div class="modal-steps-guide">
+          <h4>How to set up your free Google Drive sync (Takes 2 minutes):</h4>
+          <ol>
+            <li>Open <a href="https://script.google.com/home/start" target="_blank" rel="noopener">script.google.com</a> and click <strong>New Project</strong>.</li>
+            <li>Copy &amp; paste the Google Apps Script code below into the editor.</li>
+            <li>Click <strong>Deploy</strong> &rarr; <strong>New deployment</strong> &rarr; Select <strong>Web app</strong>.</li>
+            <li>Set <em>Execute as</em>: <strong>Me</strong> and <em>Who has access</em>: <strong>Anyone</strong>.</li>
+            <li>Click <strong>Deploy</strong>, authorize Google permissions, and paste the generated URL above!</li>
+          </ol>
+          
+          <div class="code-box-header">
+            <span>Google Apps Script Code</span>
+            <button type="button" class="btn-copy-code" id="btn-copy-gas-code">Copy Code</button>
+          </div>
+          <pre class="code-preview"><code id="gas-code-snippet">function doPost(e) {
+  var data = e.postData.contents;
+  var fileName = "ARAVIND_GYM_BACKUP.json";
+  var files = DriveApp.getFilesByName(fileName);
+  if (files.hasNext()) {
+    files.next().setContent(data);
+  } else {
+    DriveApp.createFile(fileName, data, MimeType.PLAIN_TEXT);
+  }
+  return ContentService.createTextOutput("Saved to Drive");
+}
+
+function doGet(e) {
+  var files = DriveApp.getFilesByName("ARAVIND_GYM_BACKUP.json");
+  if (files.hasNext()) {
+    return ContentService.createTextOutput(files.next().getBlob().getDataAsString()).setMimeType(ContentService.MimeType.JSON);
+  }
+  return ContentService.createTextOutput("{}").setMimeType(ContentService.MimeType.JSON);
+}</code></pre>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn-modal-secondary" id="btn-test-drive-sync">Force Sync Now</button>
+        <button type="button" class="btn-modal-primary" id="btn-save-drive-url">Save & Enable Auto-Sync</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>

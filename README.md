@@ -45,6 +45,11 @@ A clean, modern, and mobile-responsive workout logger web application designed f
 - **Editable Workout Date Picker:** Inside every workout detail page, users can select or change the workout date for that routine with a native calendar picker.
 - **Last Saved Timestamp Badge:** Tracks and displays the exact time and date when changes were saved to disk.
 
+### 6. Automatic Google Drive Cloud Backend ☁️
+- **Automatic Silent Sync:** As you type, entries automatically save locally and silently sync to your personal Google Drive in the background — no manual click required.
+- **Cross-Device Recovery:** Automatically loads existing Drive backups upon visiting the app from any phone or PC.
+- **Live Sync Badge:** Displays real-time cloud connection state in the top navigation bar.
+
 ---
 
 ## 🚀 How to Run the Web App
