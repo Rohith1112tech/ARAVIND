@@ -70,7 +70,8 @@ const STORAGE_PREFIX = "aravind_gym_data_";
 const META_PREFIX = "aravind_gym_meta_";
 const GDRIVE_URL_KEY = "aravind_gym_gdrive_url";
 const GDRIVE_LAST_SYNC_KEY = "aravind_gym_gdrive_last_sync";
-const DEFAULT_GDRIVE_URL = "https://script.google.com/macros/s/AKfycbyEDYL2htY7Hs0VumtOSMw48Oxp69S6H4kUP8oSe-KL_r_BezNnmi5eD7tPx23JRKHC/exec";
+const DEFAULT_GDRIVE_URL = "https://script.google.com/macros/s/AKfycbwmPNa_psC0CycJC5TRvm6xeoJ0uWoeoH1vIq8aHMWjLknK-GCowqA8eUILRJ7cWSeu/exec";
+const LEGACY_GDRIVE_URL = "https://script.google.com/macros/s/AKfycbyEDYL2htY7Hs0VumtOSMw48Oxp69S6H4kUP8oSe-KL_r_BezNnmi5eD7tPx23JRKHC/exec";
 
 // Curated Exercise Suggestions for each split
 const EXERCISE_SUGGESTIONS = {
@@ -1058,7 +1059,7 @@ function setupEventListeners() {
  */
 function initDriveSync() {
   let savedUrl = localStorage.getItem(GDRIVE_URL_KEY);
-  if (!savedUrl && DEFAULT_GDRIVE_URL) {
+  if (!savedUrl || savedUrl === LEGACY_GDRIVE_URL) {
     savedUrl = DEFAULT_GDRIVE_URL;
     localStorage.setItem(GDRIVE_URL_KEY, savedUrl);
   }
