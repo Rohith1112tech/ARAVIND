@@ -70,6 +70,7 @@ const STORAGE_PREFIX = "aravind_gym_data_";
 const META_PREFIX = "aravind_gym_meta_";
 const GDRIVE_URL_KEY = "aravind_gym_gdrive_url";
 const GDRIVE_LAST_SYNC_KEY = "aravind_gym_gdrive_last_sync";
+const DEFAULT_GDRIVE_URL = "https://script.google.com/macros/s/AKfycbyEDYL2htY7Hs0VumtOSMw48Oxp69S6H4kUP8oSe-KL_r_BezNnmi5eD7tPx23JRKHC/exec";
 
 // App State
 let currentDay = null;
@@ -574,7 +575,12 @@ function setupEventListeners() {
  * Google Drive Auto-Sync Logic
  */
 function initDriveSync() {
-  const savedUrl = localStorage.getItem(GDRIVE_URL_KEY);
+  let savedUrl = localStorage.getItem(GDRIVE_URL_KEY);
+  if (!savedUrl && DEFAULT_GDRIVE_URL) {
+    savedUrl = DEFAULT_GDRIVE_URL;
+    localStorage.setItem(GDRIVE_URL_KEY, savedUrl);
+  }
+
   if (savedUrl && gdriveScriptUrlInput) {
     gdriveScriptUrlInput.value = savedUrl;
   }
