@@ -1,0 +1,12 @@
+{
+  "name": "aravind-gym",
+  "version": "1.0.0",
+  "description": "ARAVIND GYM - Modern Workout Log & Split Tracker Web App",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx serve -l 3000 ."
+  },
+  "keywords": ["gym", "workout", "tracker", "fitness", "aravind-gym"],
+  "author": "ARAVIND GYM",
+  "license": "MIT"
+}
