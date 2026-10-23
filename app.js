@@ -74,6 +74,7 @@ const DEFAULT_GDRIVE_URL = "https://script.google.com/macros/s/AKfycbyEDYL2htY7H
 
 // App State
 let currentDay = null;
+let currentSessionDate = getTodayISODate();
 let saveTimeout = null;
 let driveSyncTimeout = null;
 
@@ -186,11 +187,62 @@ function renderDashboardCards() {
 }
 
 /**
- * Render exactly 10 empty or populated rows in the editable grid table
+ * Date-Specific Session Storage Helpers
  */
-function renderWorkoutTable(dayId) {
+function getSessionStorageKey(dayId, dateStr) {
+  return `aravind_gym_session_${dayId}_${dateStr}`;
+}
+
+function getDayDatesKey(dayId) {
+  return `aravind_gym_dates_${dayId}`;
+}
+
+function getLoggedDatesForDay(dayId) {
+  try {
+    const raw = localStorage.getItem(getDayDatesKey(dayId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {}
+  return [];
+}
+
+function addLoggedDateForDay(dayId, dateStr) {
+  if (!dateStr) return;
+  const list = getLoggedDatesForDay(dayId);
+  if (!list.includes(dateStr)) {
+    list.unshift(dateStr); // newest date first
+    localStorage.setItem(getDayDatesKey(dayId), JSON.stringify(list));
+  }
+}
+
+function removeLoggedDateForDay(dayId, dateStr) {
+  if (!dateStr) return;
+  let list = getLoggedDatesForDay(dayId);
+  list = list.filter(d => d !== dateStr);
+  localStorage.setItem(getDayDatesKey(dayId), JSON.stringify(list));
+}
+
+function createEmptyGrid() {
+  return Array.from({ length: TOTAL_ROWS }, () => ({
+    exercise: "",
+    set1_weight: "",
+    set1_reps: "",
+    set2_weight: "",
+    set2_reps: "",
+    set3_weight: "",
+    set3_reps: ""
+  }));
+}
+
+/**
+ * Render exactly 10 empty or populated rows in the editable grid table for a specific date
+ */
+function renderWorkoutTable(dayId, dateStr) {
   workoutTbody.innerHTML = "";
-  const savedData = loadWorkoutData(dayId);
+  const targetDate = dateStr || currentSessionDate || getTodayISODate();
+  const savedData = loadWorkoutData(dayId, targetDate);
 
   for (let i = 0; i < TOTAL_ROWS; i++) {
     const rowData = savedData[i] || {
@@ -312,12 +364,14 @@ function handleInputChange() {
 }
 
 /**
- * Saves current 10-row grid to localStorage for active day
+ * Saves current 10-row grid to localStorage for active day & active session date
  */
 function saveCurrentDayData() {
   if (!currentDay) return;
 
+  const targetDate = currentSessionDate || (workoutDateInput ? workoutDateInput.value.trim() : getTodayISODate());
   const tableData = [];
+
   for (let i = 0; i < TOTAL_ROWS; i++) {
     const exerciseInput = workoutTbody.querySelector(`input[data-row="${i}"][data-col="exercise"]`);
     const set1WeightInput = workoutTbody.querySelector(`input[data-row="${i}"][data-col="set1_weight"]`);
@@ -339,29 +393,119 @@ function saveCurrentDayData() {
   }
 
   try {
-    localStorage.setItem(STORAGE_PREFIX + currentDay.id, JSON.stringify(tableData));
+    const hasData = tableData.some(r => r.exercise || r.set1_weight || r.set1_reps || r.set2_weight || r.set2_reps || r.set3_weight || r.set3_reps);
 
-    // Save session date and last updated timestamp
-    const dateVal = workoutDateInput ? workoutDateInput.value : getTodayISODate();
+    // Save into this specific date's session key
+    localStorage.setItem(getSessionStorageKey(currentDay.id, targetDate), JSON.stringify(tableData));
+
+    if (hasData) {
+      addLoggedDateForDay(currentDay.id, targetDate);
+    }
+
+    // Save metadata
     const meta = {
-      workoutDate: dateVal,
+      lastDate: targetDate,
       lastSaved: new Date().toISOString()
     };
     localStorage.setItem(META_PREFIX + currentDay.id, JSON.stringify(meta));
 
-    if (detailTimestampText) {
-      detailTimestampText.textContent = `Last saved: ${formatTimestamp(meta.lastSaved)}`;
-    }
+    updateSessionDateStatus(currentDay.id, targetDate);
 
     // Trigger silent background auto-save to Google Drive
     triggerBackgroundDriveSync();
   } catch (err) {
-    console.error("Error saving to localStorage:", err);
+    console.error("Error saving session data:", err);
   }
 }
 
 /**
- * Retrieves workout session metadata (date, timestamp)
+ * Handles date picker change:
+ * Saves the current date session, switches to the new date, and loads previous entries or fresh 10 empty rows!
+ */
+function handleDateChange() {
+  if (!currentDay || !workoutDateInput) return;
+
+  // 1. Save whatever was currently typed for the old session date first
+  saveCurrentDayData();
+
+  // 2. Switch to the newly picked date
+  const newDate = workoutDateInput.value.trim() || getTodayISODate();
+  currentSessionDate = newDate;
+
+  // 3. Render the table for this new date (loads saved entries if existing, or fresh empty grid if new date!)
+  renderWorkoutTable(currentDay.id, currentSessionDate);
+
+  // 4. Update the session status text
+  updateSessionDateStatus(currentDay.id, currentSessionDate);
+  triggerSaveStatusIndicator("saved");
+}
+
+/**
+ * Updates status text on detail page showing whether this date is fresh or has saved data
+ */
+function updateSessionDateStatus(dayId, dateStr) {
+  if (!detailTimestampText) return;
+  const targetDate = dateStr || currentSessionDate || getTodayISODate();
+  const sessionData = loadWorkoutData(dayId, targetDate);
+  const hasData = sessionData.some(r => r.exercise || r.set1_weight || r.set1_reps || r.set2_weight || r.set2_reps || r.set3_weight || r.set3_reps);
+
+  if (hasData) {
+    detailTimestampText.innerHTML = `Saved entries for <strong>${formatCardDate(targetDate)}</strong> (Auto-saved)`;
+  } else {
+    detailTimestampText.innerHTML = `Fresh session for <strong>${formatCardDate(targetDate)}</strong> (Ready to log)`;
+  }
+}
+
+/**
+ * Retrieves workout data for a specific day AND specific date from localStorage
+ */
+function loadWorkoutData(dayId, dateStr) {
+  const targetDate = dateStr || currentSessionDate || getTodayISODate();
+  const sessionKey = getSessionStorageKey(dayId, targetDate);
+
+  try {
+    // 1. Try date-specific session key
+    const raw = localStorage.getItem(sessionKey);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length === TOTAL_ROWS) {
+        return parsed;
+      }
+    }
+
+    // 2. Backward compatibility: check if old un-dated single table exists
+    const legacyRaw = localStorage.getItem(STORAGE_PREFIX + dayId);
+    if (legacyRaw) {
+      const parsed = JSON.parse(legacyRaw);
+      if (Array.isArray(parsed) && parsed.length === TOTAL_ROWS) {
+        const meta = loadWorkoutMeta(dayId);
+        const legacyDate = meta.lastDate || meta.workoutDate || getTodayISODate();
+        if (targetDate === legacyDate) {
+          const migrated = parsed.map((row) => ({
+            exercise: row.exercise || "",
+            set1_weight: row.set1_weight !== undefined ? row.set1_weight : (row.set1 || row.weight || ""),
+            set1_reps: row.set1_reps !== undefined ? row.set1_reps : (row.reps || ""),
+            set2_weight: row.set2_weight !== undefined ? row.set2_weight : (row.set2 || ""),
+            set2_reps: row.set2_reps !== undefined ? row.set2_reps : "",
+            set3_weight: row.set3_weight !== undefined ? row.set3_weight : (row.set3 || ""),
+            set3_reps: row.set3_reps !== undefined ? row.set3_reps : ""
+          }));
+          localStorage.setItem(sessionKey, JSON.stringify(migrated));
+          addLoggedDateForDay(dayId, targetDate);
+          return migrated;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Error reading session data:", err);
+  }
+
+  // Fresh date with no data: return 10 clean, empty rows!
+  return createEmptyGrid();
+}
+
+/**
+ * Retrieves workout session metadata (last date, timestamp)
  */
 function loadWorkoutMeta(dayId) {
   try {
@@ -373,61 +517,25 @@ function loadWorkoutMeta(dayId) {
     console.error("Error loading workout meta:", err);
   }
   return {
-    workoutDate: "",
+    lastDate: "",
     lastSaved: ""
   };
 }
 
 /**
- * Retrieves workout data for a specific day from localStorage
- */
-function loadWorkoutData(dayId) {
-  try {
-    const raw = localStorage.getItem(STORAGE_PREFIX + dayId);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length === TOTAL_ROWS) {
-        // Handle migration from legacy format if present
-        return parsed.map((row) => ({
-          exercise: row.exercise || "",
-          set1_weight: row.set1_weight !== undefined ? row.set1_weight : (row.set1 || row.weight || ""),
-          set1_reps: row.set1_reps !== undefined ? row.set1_reps : (row.reps || ""),
-          set2_weight: row.set2_weight !== undefined ? row.set2_weight : (row.set2 || ""),
-          set2_reps: row.set2_reps !== undefined ? row.set2_reps : "",
-          set3_weight: row.set3_weight !== undefined ? row.set3_weight : (row.set3 || ""),
-          set3_reps: row.set3_reps !== undefined ? row.set3_reps : ""
-        }));
-      }
-    }
-  } catch (err) {
-    console.error("Error reading localStorage:", err);
-  }
-
-  // Return exactly 10 empty rows if none saved
-  return Array.from({ length: TOTAL_ROWS }, () => ({
-    exercise: "",
-    set1_weight: "",
-    set1_reps: "",
-    set2_weight: "",
-    set2_reps: "",
-    set3_weight: "",
-    set3_reps: ""
-  }));
-}
-
-/**
- * Clears current day data
+ * Clears current session data for the selected date
  */
 function clearCurrentDayData() {
   if (!currentDay) return;
-  const confirmed = window.confirm(`Clear all entries and date record for ${currentDay.name}? This cannot be undone.`);
+  const targetDate = currentSessionDate || getTodayISODate();
+  const confirmed = window.confirm(`Clear entries for ${currentDay.name} on ${formatCardDate(targetDate)}? This cannot be undone.`);
   if (confirmed) {
-    localStorage.removeItem(STORAGE_PREFIX + currentDay.id);
-    localStorage.removeItem(META_PREFIX + currentDay.id);
-    renderWorkoutTable(currentDay.id);
-    if (workoutDateInput) workoutDateInput.value = getTodayISODate();
-    if (detailTimestampText) detailTimestampText.textContent = "New session (no data)";
+    localStorage.removeItem(getSessionStorageKey(currentDay.id, targetDate));
+    removeLoggedDateForDay(currentDay.id, targetDate);
+    renderWorkoutTable(currentDay.id, targetDate);
+    updateSessionDateStatus(currentDay.id, targetDate);
     triggerSaveStatusIndicator("saved");
+    triggerBackgroundDriveSync();
   }
 }
 
@@ -504,19 +612,15 @@ function showDetailView(day) {
 
   // Load metadata (session date and timestamp)
   const meta = loadWorkoutMeta(day.id);
+  const initialDate = meta.lastDate || getTodayISODate();
+  currentSessionDate = initialDate;
+
   if (workoutDateInput) {
-    workoutDateInput.value = meta.workoutDate || getTodayISODate();
+    workoutDateInput.value = initialDate;
   }
 
-  if (detailTimestampText) {
-    if (meta.lastSaved) {
-      detailTimestampText.textContent = `Last saved: ${formatTimestamp(meta.lastSaved)}`;
-    } else {
-      detailTimestampText.textContent = `Session Date: ${formatCardDate(workoutDateInput ? workoutDateInput.value : getTodayISODate())}`;
-    }
-  }
-
-  renderWorkoutTable(day.id);
+  renderWorkoutTable(day.id, currentSessionDate);
+  updateSessionDateStatus(day.id, currentSessionDate);
 
   dashboardView.classList.remove("active");
   detailView.classList.add("active");
@@ -543,9 +647,8 @@ function setupEventListeners() {
   btnClearTable.addEventListener("click", clearCurrentDayData);
 
   if (workoutDateInput) {
-    workoutDateInput.addEventListener("change", () => {
-      handleInputChange();
-    });
+    // When date changes, automatically persist current session and switch to new date (fresh grid if new date)
+    workoutDateInput.addEventListener("change", handleDateChange);
   }
 
   // Google Drive Modal & Sync Listeners
@@ -645,14 +748,26 @@ function updateModalStatus(isConnected, message) {
 function getAllGymDataPayload() {
   const payload = {
     appName: "ARAVIND GYM",
-    version: "1.0",
+    version: "2.0",
     syncedAt: new Date().toISOString(),
     days: {}
   };
 
   WORKOUT_DAYS.forEach((day) => {
+    const dates = getLoggedDatesForDay(day.id);
+    const sessions = {};
+    dates.forEach((dateStr) => {
+      sessions[dateStr] = loadWorkoutData(day.id, dateStr);
+    });
+
+    if (currentSessionDate && !sessions[currentSessionDate]) {
+      sessions[currentSessionDate] = loadWorkoutData(day.id, currentSessionDate);
+    }
+
     payload.days[day.id] = {
-      table: loadWorkoutData(day.id),
+      dates: dates,
+      sessions: sessions,
+      table: loadWorkoutData(day.id, currentSessionDate || getTodayISODate()),
       meta: loadWorkoutMeta(day.id)
     };
   });
@@ -718,23 +833,41 @@ async function pullDriveBackup(scriptUrl) {
       let updatedAny = false;
       WORKOUT_DAYS.forEach((day) => {
         const cloudDay = cloudData.days[day.id];
-        if (cloudDay && Array.isArray(cloudDay.table)) {
-          // If local has no data or cloud is present, sync it
-          const localData = loadWorkoutData(day.id);
+        if (!cloudDay) return;
+
+        // Restore date-specific sessions
+        if (cloudDay.sessions && typeof cloudDay.sessions === "object") {
+          Object.keys(cloudDay.sessions).forEach((dateStr) => {
+            const table = cloudDay.sessions[dateStr];
+            if (Array.isArray(table) && table.some(r => r.exercise || r.set1_weight || r.set1_reps || r.set2_weight || r.set3_weight)) {
+              localStorage.setItem(getSessionStorageKey(day.id, dateStr), JSON.stringify(table));
+              addLoggedDateForDay(day.id, dateStr);
+              updatedAny = true;
+            }
+          });
+        } else if (Array.isArray(cloudDay.table)) {
+          // Fallback legacy support
+          const localData = loadWorkoutData(day.id, getTodayISODate());
           const hasLocalData = localData.some(r => r.exercise || r.set1_weight || r.set2_weight || r.set3_weight);
           if (!hasLocalData && cloudDay.table.some(r => r.exercise || r.set1_weight)) {
-            localStorage.setItem(STORAGE_PREFIX + day.id, JSON.stringify(cloudDay.table));
-            if (cloudDay.meta) {
-              localStorage.setItem(META_PREFIX + day.id, JSON.stringify(cloudDay.meta));
-            }
+            const targetDate = (cloudDay.meta && cloudDay.meta.lastDate) || getTodayISODate();
+            localStorage.setItem(getSessionStorageKey(day.id, targetDate), JSON.stringify(cloudDay.table));
+            addLoggedDateForDay(day.id, targetDate);
             updatedAny = true;
           }
+        }
+
+        if (cloudDay.meta) {
+          localStorage.setItem(META_PREFIX + day.id, JSON.stringify(cloudDay.meta));
         }
       });
 
       if (updatedAny) {
         renderDashboardCards();
-        if (currentDay) renderWorkoutTable(currentDay.id);
+        if (currentDay) {
+          renderWorkoutTable(currentDay.id, currentSessionDate);
+          updateSessionDateStatus(currentDay.id, currentSessionDate);
+        }
       }
     }
   } catch (e) {
