@@ -1,0 +1,67 @@
+{
+  "id": "/?source=pwa",
+  "name": "ARAVIND GYM - Workout Tracker",
+  "short_name": "ARAVIND GYM",
+  "description": "High-performance bodybuilding and workout session tracker with auto-save and Google Drive sync.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "categories": ["fitness", "health", "sports", "productivity"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Chest Workout",
+      "short_name": "Chest",
+      "description": "Open Chest Day workout grid",
+      "url": "./#chest",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Back Workout",
+      "short_name": "Back",
+      "description": "Open Back Day workout grid",
+      "url": "./#back",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Leg Day Workout",
+      "short_name": "Legs",
+      "description": "Open Leg Day workout grid",
+      "url": "./#legs",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

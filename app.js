@@ -105,6 +105,9 @@ const btnTestDriveSync = document.getElementById("btn-test-drive-sync");
 const btnCopyGasCode = document.getElementById("btn-copy-gas-code");
 const driveModalStatusBox = document.getElementById("drive-modal-status-box");
 const modalStatusText = document.getElementById("modal-status-text");
+const btnPwaInstall = document.getElementById("btn-pwa-install");
+
+let deferredInstallPrompt = null;
 
 /**
  * Initialize Application
@@ -112,6 +115,7 @@ const modalStatusText = document.getElementById("modal-status-text");
 function initApp() {
   initTodayDateDisplay();
   initDriveSync();
+  initPWA();
   renderDashboardCards();
   setupEventListeners();
   handleRoute();
@@ -974,6 +978,70 @@ function formatTimestamp(isoStr) {
   } catch (e) {
     return "";
   }
+}
+
+/**
+ * Progressive Web App (PWA) Setup
+ */
+function initPWA() {
+  // Register Service Worker for 100% offline support
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("./sw.js")
+        .then((reg) => {
+          console.log("ARAVIND GYM Service Worker registered with scope:", reg.scope);
+        })
+        .catch((err) => {
+          console.warn("Service Worker registration failed:", err);
+        });
+    });
+  }
+
+  // Check if already running in standalone/installed mode
+  const isStandalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  if (isStandalone && btnPwaInstall) {
+    btnPwaInstall.classList.add("installed");
+  }
+
+  // Capture the install prompt
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    if (btnPwaInstall && !isStandalone) {
+      btnPwaInstall.classList.remove("installed");
+      btnPwaInstall.style.display = "inline-flex";
+    }
+  });
+
+  if (btnPwaInstall) {
+    btnPwaInstall.addEventListener("click", async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === "accepted") {
+          btnPwaInstall.classList.add("installed");
+        }
+        deferredInstallPrompt = null;
+      } else {
+        // iOS or already prompt-less browsers guidance
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        if (isIOS) {
+          alert("To install ARAVIND GYM on iPhone/iPad:\n\n1. Tap the Share button (square with arrow) at the bottom of Safari.\n2. Scroll down and tap 'Add to Home Screen'.\n3. Tap 'Add' in the top right corner.\n\nNow you can launch it like a native app!");
+        } else {
+          alert("To install ARAVIND GYM:\n\n1. Tap the browser menu (⋮ in Chrome/Edge).\n2. Select 'Install app' or 'Add to Home screen'.\n\nThe app will work offline in your gym!");
+        }
+      }
+    });
+  }
+
+  window.addEventListener("appinstalled", () => {
+    if (btnPwaInstall) {
+      btnPwaInstall.classList.add("installed");
+    }
+    deferredInstallPrompt = null;
+    console.log("ARAVIND GYM app installed successfully");
+  });
 }
 
 /**
