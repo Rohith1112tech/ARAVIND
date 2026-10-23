@@ -303,23 +303,39 @@
             <button type="button" class="btn-copy-code" id="btn-copy-gas-code">Copy Code</button>
           </div>
           <pre class="code-preview"><code id="gas-code-snippet">function doPost(e) {
-  var data = e.postData.contents;
-  var fileName = "ARAVIND_GYM_BACKUP.json";
-  var files = DriveApp.getFilesByName(fileName);
-  if (files.hasNext()) {
-    files.next().setContent(data);
-  } else {
-    DriveApp.createFile(fileName, data, MimeType.PLAIN_TEXT);
+  try {
+    var data = e.postData.contents;
+    var fileName = "ARAVIND_GYM_BACKUP.json";
+    var files = DriveApp.getFilesByName(fileName);
+    if (files.hasNext()) {
+      files.next().setContent(data);
+    } else {
+      DriveApp.createFile(fileName, data, MimeType.PLAIN_TEXT);
+    }
+    return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Saved to Google Drive" }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  return ContentService.createTextOutput("Saved to Drive");
 }
 
 function doGet(e) {
-  var files = DriveApp.getFilesByName("ARAVIND_GYM_BACKUP.json");
-  if (files.hasNext()) {
-    return ContentService.createTextOutput(files.next().getBlob().getDataAsString()).setMimeType(ContentService.MimeType.JSON);
+  try {
+    var fileName = "ARAVIND_GYM_BACKUP.json";
+    var files = DriveApp.getFilesByName(fileName);
+    if (files.hasNext()) {
+      var content = files.next().getBlob().getDataAsString();
+      return ContentService.createTextOutput(content)
+        .setMimeType(ContentService.MimeType.JSON);
+    } else {
+      return ContentService.createTextOutput(JSON.stringify({ status: "empty" }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", error: err.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  return ContentService.createTextOutput("{}").setMimeType(ContentService.MimeType.JSON);
 }</code></pre>
         </div>
       </div>
