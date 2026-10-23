@@ -1097,7 +1097,7 @@ function closeDriveModal() {
 function updateDriveStatusBadge(state, timeIso) {
   if (!btnDriveSyncSettings || !driveSyncStatusText) return;
 
-  btnDriveSyncSettings.classList.remove("synced", "syncing");
+  btnDriveSyncSettings.classList.remove("synced", "syncing", "error");
 
   if (state === "syncing") {
     btnDriveSyncSettings.classList.add("syncing");
@@ -1108,6 +1108,10 @@ function updateDriveStatusBadge(state, timeIso) {
     if (timeIso) {
       btnDriveSyncSettings.title = `Last saved to Google Drive: ${formatTimestamp(timeIso)}`;
     }
+  } else if (state === "error") {
+    btnDriveSyncSettings.classList.add("error");
+    driveSyncStatusText.textContent = "Drive: Permission Needed ⚠️";
+    btnDriveSyncSettings.title = "Click to fix: Google Apps Script needs 'Who has access' set to 'Anyone'";
   } else {
     driveSyncStatusText.textContent = "Drive Auto-Save: Connect";
     btnDriveSyncSettings.title = "Click to connect your Google Drive for automatic background saving";
@@ -1193,9 +1197,7 @@ async function performDriveSync(scriptUrl) {
     updateModalStatus(true, `Synced to Drive &bull; ${formatTimestamp(nowIso)}`);
   } catch (err) {
     console.warn("Drive Auto-Sync Notice:", err);
-    // Maintain active indicator if network temporarily blips
-    const lastSync = localStorage.getItem(GDRIVE_LAST_SYNC_KEY);
-    updateDriveStatusBadge("synced", lastSync);
+    updateDriveStatusBadge("error");
   }
 }
 
@@ -1203,10 +1205,26 @@ async function performDriveSync(scriptUrl) {
  * Pulls latest backup from Google Drive on startup or force sync
  */
 async function pullDriveBackup(scriptUrl) {
+  if (!scriptUrl) return;
+
   try {
     const res = await fetch(`${scriptUrl}?action=get&t=${Date.now()}`);
-    if (!res.ok) return;
-    const cloudData = await res.json();
+    const text = await res.text();
+
+    // Check if Google Apps Script returned a 403 or "You need access" login page
+    if (text.includes("You need access") || text.includes("accounts.google.com") || res.status === 403) {
+      updateDriveStatusBadge("error");
+      updateModalStatus(false, `<span style="color:#f87171;font-weight:700;">Google Permission Error (403):</span> In <a href="https://script.google.com" target="_blank" style="color:#38bdf8;text-decoration:underline;">script.google.com</a>, click <strong>Deploy</strong> &rarr; <strong>Manage deployments</strong>, click Edit (pencil), and change <strong>Who has access</strong> from 'Only myself' to <strong>'Anyone'</strong>.`);
+      return;
+    }
+
+    let cloudData;
+    try {
+      cloudData = JSON.parse(text);
+    } catch (parseErr) {
+      console.warn("Could not parse cloud JSON:", parseErr);
+      return;
+    }
 
     if (cloudData && cloudData.days) {
       let updatedAny = false;
@@ -1247,10 +1265,18 @@ async function pullDriveBackup(scriptUrl) {
           renderWorkoutTable(currentDay.id, currentSessionDate);
           updateSessionDateStatus(currentDay.id, currentSessionDate);
         }
+        showToast("Synced latest workouts from Google Drive! ✓");
       }
+
+      const nowIso = new Date().toISOString();
+      updateDriveStatusBadge("synced", nowIso);
+      updateModalStatus(true, `Connected &bull; Last synced: ${formatTimestamp(nowIso)}`);
+    } else {
+      // Cloud file is empty or first time, push local data to cloud
+      performDriveSync(scriptUrl);
     }
   } catch (e) {
-    // Silent fallback to local storage
+    console.warn("Pull Drive backup notice:", e);
   }
 }
 
@@ -1278,18 +1304,24 @@ function saveDriveUrlAndSync() {
   performDriveSync(url);
 
   setTimeout(() => {
+    pullDriveBackup(url);
     alert("Google Drive background auto-save is now active! Any changes you make will save to your Drive automatically.");
     closeDriveModal();
-  }, 700);
+  }, 900);
 }
 
-function forceDriveSync() {
+async function forceDriveSync() {
   const url = gdriveScriptUrlInput ? gdriveScriptUrlInput.value.trim() : localStorage.getItem(GDRIVE_URL_KEY);
   if (!url) {
     alert("Please enter your Google Apps Script Web App URL first.");
     return;
   }
-  performDriveSync(url);
+  updateModalStatus(true, "Syncing data to Google Drive...");
+  await performDriveSync(url);
+  setTimeout(() => {
+    pullDriveBackup(url);
+    showToast("Synced with Google Drive! ✓");
+  }, 1000);
 }
 
 function copyGasCode() {

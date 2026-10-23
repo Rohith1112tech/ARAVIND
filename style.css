@@ -184,6 +184,12 @@ body {
   animation: pulseRotate 1s infinite linear;
 }
 
+.drive-sync-badge.error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f87171;
+}
+
 .pwa-install-badge {
   display: inline-flex;
   align-items: center;
