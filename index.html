@@ -141,8 +141,22 @@
             <p class="detail-description" id="detail-description">Fill in your exercises, track all 3 sets, weight, and rep counts.</p>
           </div>
           <div class="detail-actions">
-            <button id="btn-clear-table" class="btn-secondary" title="Clear this day's entries">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <button id="btn-copy-prev" class="btn-action btn-copy-prev" type="button" title="Copy exercises & weights from your previous session">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy Last Workout</span>
+            </button>
+            <button id="btn-toggle-timer" class="btn-action btn-timer-toggle" type="button" title="Toggle Rest Timer">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              <span>Rest Timer</span>
+            </button>
+            <button id="btn-clear-table" class="btn-action btn-clear-danger" type="button" title="Clear this day's entries">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 6h18"/>
                 <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
                 <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
@@ -151,6 +165,55 @@
             </button>
           </div>
         </div>
+
+        <!-- Floating / Expandable Glassmorphic Rest Timer -->
+        <div class="rest-timer-panel active" id="rest-timer-panel">
+          <div class="timer-inner">
+            <div class="timer-brand">
+              <div class="timer-icon-pulse">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </div>
+              <div class="timer-info">
+                <span class="timer-tag">REST TIMER</span>
+                <span class="timer-display" id="timer-display-digits">01:00</span>
+              </div>
+            </div>
+
+            <!-- Quick Preset Pills -->
+            <div class="timer-presets" id="timer-presets-container">
+              <button type="button" class="preset-pill" data-seconds="30">30s</button>
+              <button type="button" class="preset-pill active" data-seconds="60">60s</button>
+              <button type="button" class="preset-pill" data-seconds="90">90s</button>
+              <button type="button" class="preset-pill" data-seconds="120">2m</button>
+              <button type="button" class="preset-pill" data-seconds="180">3m</button>
+            </div>
+
+            <!-- Timer Action Controls -->
+            <div class="timer-controls">
+              <button type="button" class="btn-timer-primary" id="btn-timer-start-pause">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" id="timer-icon-playpause">
+                  <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span id="timer-start-text">Start</span>
+              </button>
+              <button type="button" class="btn-timer-secondary" id="btn-timer-plus15" title="Add 15 seconds">+15s</button>
+              <button type="button" class="btn-timer-secondary" id="btn-timer-reset" title="Reset timer">Reset</button>
+              <button type="button" class="btn-timer-close" id="btn-timer-hide" title="Hide Rest Timer">&times;</button>
+            </div>
+          </div>
+          <div class="timer-progress-track">
+            <div class="timer-progress-bar" id="timer-progress-bar" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Dynamic Exercise Suggestions DataList -->
+        <datalist id="exercise-suggestions"></datalist>
+
+        <!-- Toast Notification Popover -->
+        <div id="toast-notification" class="toast-notification"></div>
 
         <!-- 10-Row Input Grid Table -->
         <div class="table-container">

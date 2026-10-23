@@ -72,11 +72,93 @@ const GDRIVE_URL_KEY = "aravind_gym_gdrive_url";
 const GDRIVE_LAST_SYNC_KEY = "aravind_gym_gdrive_last_sync";
 const DEFAULT_GDRIVE_URL = "https://script.google.com/macros/s/AKfycbyEDYL2htY7Hs0VumtOSMw48Oxp69S6H4kUP8oSe-KL_r_BezNnmi5eD7tPx23JRKHC/exec";
 
+// Curated Exercise Suggestions for each split
+const EXERCISE_SUGGESTIONS = {
+  chest: [
+    "Barbell Bench Press",
+    "Incline Dumbbell Press",
+    "Incline Barbell Bench Press",
+    "Flat Dumbbell Press",
+    "Cable Crossover",
+    "Pec Deck Fly",
+    "Dips (Chest Focus)",
+    "Decline Dumbbell Press",
+    "Push-Ups",
+    "Dumbbell Pullover"
+  ],
+  back: [
+    "Barbell Deadlift",
+    "Lat Pulldown (Wide Grip)",
+    "Barbell Bent-Over Row",
+    "Seated Cable Row",
+    "T-Bar Row",
+    "Single-Arm Dumbbell Row",
+    "Pull-Ups / Chin-Ups",
+    "Face Pulls",
+    "Hyperextensions",
+    "Straight-Arm Lat Pulldown"
+  ],
+  biceps: [
+    "Barbell Bicep Curl",
+    "Dumbbell Hammer Curl",
+    "Incline Dumbbell Curl",
+    "Preacher Curl (EZ-Bar)",
+    "Cable Rope Hammer Curl",
+    "Concentration Curl",
+    "Spider Curl",
+    "EZ-Bar 21s",
+    "Cable Bicep Curl",
+    "Reverse Grip Barbell Curl"
+  ],
+  triceps: [
+    "Tricep Rope Pushdown",
+    "Skull Crushers (EZ-Bar)",
+    "Close-Grip Bench Press",
+    "Overhead Dumbbell Extension",
+    "Dips (Tricep Focus)",
+    "Cable Straight-Bar Pushdown",
+    "Overhead Cable Tricep Extension",
+    "Diamond Push-Ups",
+    "Single-Arm Cable Tricep Kickback"
+  ],
+  shoulder: [
+    "Overhead Barbell Military Press",
+    "Seated Dumbbell Shoulder Press",
+    "Dumbbell Lateral Raise",
+    "Cable Lateral Raise",
+    "Rear Delt Reverse Fly",
+    "Arnold Press",
+    "Face Pulls",
+    "Dumbbell Front Raise",
+    "Barbell Upright Row",
+    "Dumbbell Shrugs"
+  ],
+  "leg-day": [
+    "Barbell Back Squat",
+    "Romanian Deadlift (RDL)",
+    "Leg Press",
+    "Bulgarian Split Squat",
+    "Leg Extension Machine",
+    "Lying Leg Curl",
+    "Standing Calf Raise",
+    "Seated Calf Raise",
+    "Walking Dumbbell Lunges",
+    "Barbell Hip Thrust"
+  ]
+};
+
 // App State
 let currentDay = null;
 let currentSessionDate = getTodayISODate();
 let saveTimeout = null;
 let driveSyncTimeout = null;
+
+// Rest Timer State
+let timerDuration = 60;
+let timerRemaining = 60;
+let timerInterval = null;
+let isTimerRunning = false;
+let toastTimeout = null;
 
 // DOM Elements
 const dashboardView = document.getElementById("dashboard-view");
@@ -93,6 +175,21 @@ const btnClearTable = document.getElementById("btn-clear-table");
 const currentDateText = document.getElementById("current-date-text");
 const workoutDateInput = document.getElementById("workout-date-input");
 const detailTimestampText = document.getElementById("detail-timestamp-text");
+
+// Detail Action Elements
+const btnCopyPrev = document.getElementById("btn-copy-prev");
+const btnToggleTimer = document.getElementById("btn-toggle-timer");
+const restTimerPanel = document.getElementById("rest-timer-panel");
+const timerDisplayDigits = document.getElementById("timer-display-digits");
+const btnTimerStartPause = document.getElementById("btn-timer-start-pause");
+const timerStartText = document.getElementById("timer-start-text");
+const btnTimerPlus15 = document.getElementById("btn-timer-plus15");
+const btnTimerReset = document.getElementById("btn-timer-reset");
+const btnTimerHide = document.getElementById("btn-timer-hide");
+const timerProgressBar = document.getElementById("timer-progress-bar");
+const timerPresetsContainer = document.getElementById("timer-presets-container");
+const exerciseSuggestionsDatalist = document.getElementById("exercise-suggestions");
+const toastNotification = document.getElementById("toast-notification");
 
 // Drive Sync Elements
 const btnDriveSyncSettings = document.getElementById("btn-drive-sync-settings");
@@ -269,6 +366,7 @@ function renderWorkoutTable(dayId, dateStr) {
           class="grid-input" 
           data-row="${i}" 
           data-col="exercise" 
+          list="exercise-suggestions"
           placeholder="e.g. Exercise ${i + 1}" 
           value="${escapeHtml(rowData.exercise)}"
           autocomplete="off"
@@ -540,7 +638,252 @@ function clearCurrentDayData() {
     updateSessionDateStatus(currentDay.id, targetDate);
     triggerSaveStatusIndicator("saved");
     triggerBackgroundDriveSync();
+    showToast(`Cleared table for ${formatCardDate(targetDate)}`);
   }
+}
+
+/**
+ * 1-Click Copy From Previous Workout
+ * Auto-populates the current date grid from the most recent previously logged session of this routine!
+ */
+function copyPreviousWorkout() {
+  if (!currentDay) return;
+
+  const allDates = getLoggedDatesForDay(currentDay.id);
+  const targetDate = currentSessionDate || getTodayISODate();
+
+  // Find most recent logged date that is NOT the currently selected date
+  const pastDates = allDates.filter((d) => d !== targetDate);
+
+  if (pastDates.length === 0) {
+    showToast(`No previous ${currentDay.name} workout found to copy.`);
+    return;
+  }
+
+  const prevDate = pastDates[0];
+  const prevData = loadWorkoutData(currentDay.id, prevDate);
+  const hasData = prevData.some((r) => r.exercise || r.set1_weight);
+
+  if (!hasData) {
+    showToast(`Previous workout on ${formatCardDate(prevDate)} was empty.`);
+    return;
+  }
+
+  // If user already typed something today, ask before overwriting
+  const currentData = loadWorkoutData(currentDay.id, targetDate);
+  const currentHasData = currentData.some((r) => r.exercise || r.set1_weight);
+  if (currentHasData) {
+    const ok = window.confirm(`Replace current entries with previous workout from ${formatCardDate(prevDate)}?`);
+    if (!ok) return;
+  }
+
+  // Clone data into current session date
+  localStorage.setItem(getSessionStorageKey(currentDay.id, targetDate), JSON.stringify(prevData));
+  addLoggedDateForDay(currentDay.id, targetDate);
+
+  // Re-render table and status
+  renderWorkoutTable(currentDay.id, targetDate);
+  updateSessionDateStatus(currentDay.id, targetDate);
+  triggerSaveStatusIndicator("saved");
+  triggerBackgroundDriveSync();
+
+  showToast(`Loaded previous workout from ${formatCardDate(prevDate)}! 💪`);
+}
+
+/**
+ * Populates HTML5 Exercise Suggestions DataList dynamically per split
+ */
+function populateExerciseSuggestions(dayId) {
+  if (!exerciseSuggestionsDatalist) return;
+  exerciseSuggestionsDatalist.innerHTML = "";
+  const list = EXERCISE_SUGGESTIONS[dayId] || [];
+  list.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    exerciseSuggestionsDatalist.appendChild(opt);
+  });
+}
+
+/**
+ * Rest Timer Controls & Web Audio Chime
+ */
+function updateTimerDisplay() {
+  if (!timerDisplayDigits || !timerProgressBar) return;
+  const mins = Math.floor(timerRemaining / 60);
+  const secs = timerRemaining % 60;
+  timerDisplayDigits.textContent = `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+
+  const pct = Math.max(0, Math.min(100, (timerRemaining / timerDuration) * 100));
+  timerProgressBar.style.width = `${pct}%`;
+}
+
+function startTimer() {
+  if (isTimerRunning) return;
+  isTimerRunning = true;
+  if (btnTimerStartPause) {
+    btnTimerStartPause.classList.add("running");
+    if (timerStartText) timerStartText.textContent = "Pause";
+    const icon = document.getElementById("timer-icon-playpause");
+    if (icon) {
+      icon.innerHTML = `<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>`;
+    }
+  }
+  if (restTimerPanel) restTimerPanel.classList.add("running");
+
+  clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if (timerRemaining > 0) {
+      timerRemaining--;
+      updateTimerDisplay();
+      if (timerRemaining === 0) {
+        timerFinished();
+      }
+    }
+  }, 1000);
+}
+
+function pauseTimer() {
+  isTimerRunning = false;
+  clearInterval(timerInterval);
+  if (btnTimerStartPause) {
+    btnTimerStartPause.classList.remove("running");
+    if (timerStartText) timerStartText.textContent = "Resume";
+    const icon = document.getElementById("timer-icon-playpause");
+    if (icon) {
+      icon.innerHTML = `<polygon points="5 3 19 12 5 21 5 3"/>`;
+    }
+  }
+  if (restTimerPanel) restTimerPanel.classList.remove("running");
+}
+
+function toggleTimerPlayPause() {
+  if (isTimerRunning) {
+    pauseTimer();
+  } else {
+    if (timerRemaining <= 0) {
+      timerRemaining = timerDuration;
+      updateTimerDisplay();
+    }
+    startTimer();
+  }
+}
+
+function resetTimer() {
+  pauseTimer();
+  timerRemaining = timerDuration;
+  if (timerStartText) timerStartText.textContent = "Start";
+  const icon = document.getElementById("timer-icon-playpause");
+  if (icon) {
+    icon.innerHTML = `<polygon points="5 3 19 12 5 21 5 3"/>`;
+  }
+  updateTimerDisplay();
+}
+
+function addTimerSeconds(seconds) {
+  timerRemaining += seconds;
+  if (timerRemaining > timerDuration) {
+    timerDuration = timerRemaining;
+  }
+  updateTimerDisplay();
+  showToast(`Added +${seconds}s to rest timer`);
+}
+
+function selectTimerPreset(seconds, targetButton) {
+  timerDuration = seconds;
+  timerRemaining = seconds;
+  pauseTimer();
+  if (timerStartText) timerStartText.textContent = "Start";
+  const icon = document.getElementById("timer-icon-playpause");
+  if (icon) {
+    icon.innerHTML = `<polygon points="5 3 19 12 5 21 5 3"/>`;
+  }
+
+  if (timerPresetsContainer) {
+    timerPresetsContainer.querySelectorAll(".preset-pill").forEach((btn) => btn.classList.remove("active"));
+  }
+  if (targetButton) {
+    targetButton.classList.add("active");
+  }
+
+  updateTimerDisplay();
+}
+
+function timerFinished() {
+  pauseTimer();
+  if (timerStartText) timerStartText.textContent = "Start";
+  const icon = document.getElementById("timer-icon-playpause");
+  if (icon) {
+    icon.innerHTML = `<polygon points="5 3 19 12 5 21 5 3"/>`;
+  }
+
+  playTimerChime();
+  showToast("Rest time complete! Ready for your next set! 🔥");
+}
+
+/**
+ * 100% Offline Dual-Tone Chime & Mobile Haptic Vibration via Web Audio API
+ */
+function playTimerChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+
+    // Tone 1: 880Hz (A5)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(880, ctx.currentTime);
+    gain1.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.28);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(ctx.currentTime);
+    osc1.stop(ctx.currentTime + 0.28);
+
+    // Tone 2: 1174.66Hz (D6)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.15);
+    gain2.gain.setValueAtTime(0.28, ctx.currentTime + 0.15);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(ctx.currentTime + 0.15);
+    osc2.stop(ctx.currentTime + 0.55);
+
+    // Phone vibration in pocket
+    if ("vibrate" in navigator) {
+      navigator.vibrate([200, 100, 300]);
+    }
+  } catch (err) {
+    console.warn("Chime playback notice:", err);
+  }
+}
+
+function toggleRestTimerVisibility() {
+  if (!restTimerPanel) return;
+  restTimerPanel.classList.toggle("active");
+  if (restTimerPanel.classList.contains("active")) {
+    updateTimerDisplay();
+  }
+}
+
+function showToast(message) {
+  if (!toastNotification) return;
+  toastNotification.innerHTML = `
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-gold)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    <span>${escapeHtml(message)}</span>
+  `;
+  toastNotification.classList.add("show");
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    toastNotification.classList.remove("show");
+  }, 3200);
 }
 
 /**
@@ -625,6 +968,8 @@ function showDetailView(day) {
 
   renderWorkoutTable(day.id, currentSessionDate);
   updateSessionDateStatus(day.id, currentSessionDate);
+  populateExerciseSuggestions(day.id);
+  updateTimerDisplay();
 
   dashboardView.classList.remove("active");
   detailView.classList.add("active");
@@ -649,6 +994,36 @@ function setupEventListeners() {
   });
 
   btnClearTable.addEventListener("click", clearCurrentDayData);
+
+  // Copy Previous Workout
+  if (btnCopyPrev) {
+    btnCopyPrev.addEventListener("click", copyPreviousWorkout);
+  }
+
+  // Rest Timer Controls
+  if (btnToggleTimer) {
+    btnToggleTimer.addEventListener("click", toggleRestTimerVisibility);
+  }
+  if (btnTimerHide) {
+    btnTimerHide.addEventListener("click", toggleRestTimerVisibility);
+  }
+  if (btnTimerStartPause) {
+    btnTimerStartPause.addEventListener("click", toggleTimerPlayPause);
+  }
+  if (btnTimerReset) {
+    btnTimerReset.addEventListener("click", resetTimer);
+  }
+  if (btnTimerPlus15) {
+    btnTimerPlus15.addEventListener("click", () => addTimerSeconds(15));
+  }
+  if (timerPresetsContainer) {
+    timerPresetsContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest(".preset-pill");
+      if (btn && btn.dataset.seconds) {
+        selectTimerPreset(parseInt(btn.dataset.seconds, 10), btn);
+      }
+    });
+  }
 
   if (workoutDateInput) {
     // When date changes, automatically persist current session and switch to new date (fresh grid if new date)
