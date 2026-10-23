@@ -245,28 +245,11 @@ body {
   transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
-.card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: linear-gradient(90deg, var(--card-accent, var(--accent-amber)), transparent);
-  opacity: 0.7;
-  z-index: 3;
-  transition: opacity 0.2s ease;
-}
-
 .card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-5px);
   background: var(--bg-card-hover);
   border-color: var(--card-accent, var(--accent-amber));
-  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.7), 0 0 15px rgba(245, 158, 11, 0.15);
-}
-
-.card:hover::before {
-  opacity: 1;
+  box-shadow: 0 14px 32px -10px rgba(0, 0, 0, 0.75), 0 0 20px rgba(245, 158, 11, 0.15);
 }
 
 .card-hero-media {
@@ -366,57 +349,43 @@ body {
   line-height: 1.4;
 }
 
-.card-footer-info {
-  margin-top: 1.25rem;
-  padding-top: 0.85rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+.card-footer-action {
+  padding: 0.9rem 1.3rem 1.25rem;
+  margin-top: auto;
+}
+
+.btn-open-grid {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  font-size: 0.82rem;
-  color: var(--text-dim);
-}
-
-.card-meta-left {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.card-saved-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.card-saved-count.has-data {
-  color: var(--accent-gold);
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.72rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-main);
+  font-size: 0.9rem;
   font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.card-date-line {
-  font-size: 0.74rem;
-  color: var(--text-dim);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
+.card:hover .btn-open-grid {
+  background: linear-gradient(135deg, var(--card-accent, var(--accent-gold)), #d97706);
+  color: #000;
+  border-color: transparent;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.28);
 }
 
-.card-date-line.has-date {
-  color: #a1a1aa;
-}
-
-.card-action-cue {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-weight: 600;
-  color: var(--card-accent, var(--accent-gold));
-  transition: transform 0.2s ease;
-}
-
-.card:hover .card-action-cue {
+.card:hover .btn-open-grid svg {
   transform: translateX(4px);
+}
+
+.btn-open-grid svg {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
 }
 
 /* ==========================================================================
